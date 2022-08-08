@@ -10,6 +10,7 @@ namespace Database
         private SqliteConnection dbConnection;
         private SqliteCommand dbCommand;
         private SqliteDataReader reader;
+        private SqliteTransaction transaction;
 
         public SQLiteHelper()
         {
@@ -28,12 +29,9 @@ namespace Database
             {
                 dbConnection = new SqliteConnection(connectionString);
                 dbConnection.Open();
-                // Debug.Log("Connected to db");
             }
             catch (Exception e)
             {
-                //string temp1 = e.ToString();
-                //Debug.Log(temp1);
             }
 
         }
@@ -58,6 +56,8 @@ namespace Database
                 dbConnection = null;
             }
 
+            transaction?.Dispose();
+            transaction = null;
             //Debug.Log("Disconnected from mysql.");
         }
 
@@ -185,6 +185,35 @@ namespace Database
             }
 
             return ExecuteQuery(query);
+        }
+
+        public SqliteTransaction BeginTransaction(string query)
+        {
+            dbCommand = dbConnection.CreateCommand();
+            dbCommand.CommandText = query;
+            transaction = dbConnection.BeginTransaction();
+            dbCommand.ExecuteNonQuery();
+
+            return transaction;
+        }
+
+
+        public bool Transaction(string query)
+        {
+            try
+            {
+                dbCommand = dbConnection.CreateCommand();
+                dbCommand.CommandText = query;
+                transaction = dbConnection.BeginTransaction();
+                dbCommand.ExecuteNonQuery();
+                transaction.Commit();
+            }
+            catch
+            {
+                transaction.Rollback();
+                return false;
+            }
+            return true;
         }
 
     }
