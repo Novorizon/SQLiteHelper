@@ -1,220 +1,507 @@
 ﻿
 using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using Mono.Data.Sqlite;
 
 namespace Database
 {
-    public class SQLiteHelper
+    public class SQLiteHelper : IDisposable
     {
 
-        private SqliteConnection dbConnection;
-        private SqliteCommand dbCommand;
+        private SqliteConnection connection;
+        private SqliteCommand command;
         private SqliteDataReader reader;
         private SqliteTransaction transaction;
+        private string connectionString = "";
 
-        public SQLiteHelper()
+        private SQLiteHelper()
         {
-
         }
 
         public SQLiteHelper(string connectionString)
         {
-            Open(connectionString);
+            this.connectionString = connectionString;
         }
 
 
-        public void Open(string connectionString)
+        /// <summary>
+        /// Executes a query and returns a SqliteDataReader for reading the results.
+        /// </summary>
+        public SqliteDataReader ExecuteQuery(string query)
         {
             try
             {
-                dbConnection = new SqliteConnection(connectionString);
-                dbConnection.Open();
-            }
-            catch (Exception e)
-            {
-            }
+                connection = new SqliteConnection(connectionString);
+                connection.Open();
+                command = connection.CreateCommand();
+                command.CommandText = query;
+                reader = command.ExecuteReader();
 
-        }
-
-        public void Close()
-        {
-            if (dbCommand != null)
-            {
-                dbCommand.Dispose();
-                dbCommand = null;
-            }
-
-            if (reader != null)
-            {
-                reader.Dispose();
-                reader = null;
-            }
-
-            if (dbConnection != null)
-            {
-                dbConnection.Close();
-                dbConnection = null;
-            }
-
-            transaction?.Dispose();
-            transaction = null;
-            //Debug.Log("Disconnected from mysql.");
-        }
-
-        public SqliteDataReader ExecuteQuery(string sqlQuery)
-        {
-            dbCommand = dbConnection.CreateCommand();
-            dbCommand.CommandText = sqlQuery;
-            reader = dbCommand.ExecuteReader();
-
-            return reader;
-        }
-
-        public SqliteDataReader ReadFullTable(string tableName)
-        {
-            string query = "SELECT * FROM " + tableName;
-
-            return ExecuteQuery(query);
-        }
-
-        public SqliteDataReader InsertInto(string tableName, string[] values)
-        {
-            string query = "INSERT INTO " + tableName + " VALUES (" + values[0];
-
-            for (int i = 1; i < values.Length; ++i)
-            {
-                query += ", " + values[i];
-            }
-            query += ")";
-
-            return ExecuteQuery(query);
-        }
-
-        public SqliteDataReader UpdateInto(string tableName, string[] cols, string[] colsvalues, string selectkey, string selectvalue)
-        {
-            string query = "UPDATE " + tableName + " SET " + cols[0] + " = " + colsvalues[0];
-
-            for (int i = 1; i < colsvalues.Length; ++i)
-            {
-                query += ", " + cols[i] + " =" + colsvalues[i];
-            }
-            query += " WHERE " + selectkey + " = " + selectvalue + " ";
-
-            return ExecuteQuery(query);
-        }
-
-        public SqliteDataReader Delete(string tableName, string[] cols, string[] colsvalues)
-        {
-            string query = "DELETE FROM " + tableName + " WHERE " + cols[0] + " = " + colsvalues[0];
-
-            for (int i = 1; i < colsvalues.Length; ++i)
-            {
-
-                query += " or " + cols[i] + " = " + colsvalues[i];
-            }
-            //Debug.Log(query);
-            return ExecuteQuery(query);
-        }
-
-        public SqliteDataReader InsertIntoSpecific(string tableName, string[] cols, string[] values)
-        {
-            if (cols.Length != values.Length)
-            {
-                //Debug.Log("columns.Length != values.Length");
-                //throw new SqliteException("columns.Length != values.Length");
-            }
-
-            string query = "INSERT INTO " + tableName + "(" + cols[0];
-            for (int i = 1; i < cols.Length; ++i)
-            {
-                query += ", " + cols[i];
-            }
-            query += ") VALUES (" + values[0];
-
-            for (int i = 1; i < values.Length; ++i)
-            {
-                query += ", " + values[i];
-            }
-            query += ")";
-
-            return ExecuteQuery(query);
-        }
-
-        public SqliteDataReader DeleteContents(string tableName)
-        {
-            string query = "DELETE FROM " + tableName;
-
-            return ExecuteQuery(query);
-        }
-
-        public SqliteDataReader CreateTable(string name, string[] col, string[] colType)
-        {
-
-            if (col.Length != colType.Length)
-            {
-                throw new SqliteException("columns.Length != colType.Length");
-            }
-
-            string query = "CREATE TABLE " + name + " (" + col[0] + " " + colType[0];
-            for (int i = 1; i < col.Length; ++i)
-            {
-                query += ", " + col[i] + " " + colType[i];
-            }
-            query += ")";
-
-            return ExecuteQuery(query);
-        }
-
-        public SqliteDataReader SelectWhere(string tableName, string[] items, string[] col, string[] operation, string[] values)
-        {
-            if (col.Length != operation.Length || operation.Length != values.Length)
-            {
-                throw new SqliteException("col.Length != operation.Length != values.Length");
-            }
-
-            string query = "SELECT " + items[0];
-            for (int i = 1; i < items.Length; ++i)
-            {
-                query += ", " + items[i];
-            }
-
-            query += " FROM " + tableName + " WHERE " + col[0] + operation[0] + "'" + values[0] + "' ";
-            for (int i = 1; i < col.Length; ++i)
-            {
-                query += " AND " + col[i] + operation[i] + "'" + values[0] + "' ";
-            }
-
-            return ExecuteQuery(query);
-        }
-
-        public SqliteTransaction BeginTransaction(string query)
-        {
-            dbCommand = dbConnection.CreateCommand();
-            dbCommand.CommandText = query;
-            transaction = dbConnection.BeginTransaction();
-            dbCommand.ExecuteNonQuery();
-
-            return transaction;
-        }
-
-
-        public bool Transaction(string query)
-        {
-            try
-            {
-                dbCommand = dbConnection.CreateCommand();
-                dbCommand.CommandText = query;
-                transaction = dbConnection.BeginTransaction();
-                dbCommand.ExecuteNonQuery();
-                transaction.Commit();
+                return reader;
             }
             catch
             {
-                transaction.Rollback();
-                return false;
+                Dispose();
+                return null;
+
             }
-            return true;
+            //using (var connection = new SqliteConnection(connectionString))
+            //{
+            //    connection.Open();
+            //    using (var command = new SqliteCommand(query, connection))
+            //    {
+            //        return command.ExecuteReader();
+            //    }
+            //}
         }
 
+
+        /// <summary>
+        /// Asynchronously executes a query and returns a DbDataReader for reading the results.
+        /// </summary>
+        public async Task<SqliteDataReader> ExecuteQueryAsync(string query)
+        {
+            try
+            {
+                var connection = new SqliteConnection(connectionString);
+                await connection.OpenAsync();
+                command = new SqliteCommand(query, connection);
+                return await command.ExecuteReaderAsync() as SqliteDataReader;
+            }
+            catch
+            {
+                Dispose();
+                return null;
+            }
+
+            //using (var connection = new SqliteConnection(connectionString))
+            //{
+            //    await connection.OpenAsync();
+            //    using (var command = new SqliteCommand(query, connection))
+            //    {
+            //        return await command.ExecuteReaderAsync() as SqliteDataReader;
+            //    }
+            //}
+        }
+
+        /// <summary>
+        /// Executes a no query and returns a int for reading the results.
+        /// </summary>
+        public int ExecuteNonQuery(string query)
+        {
+            try
+            {
+                using (var connection = new SqliteConnection(connectionString))
+                {
+                    connection.Open();
+                    using (var command = new SqliteCommand(query, connection))
+                    {
+                        return command.ExecuteNonQuery();
+                    }
+                }
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+
+        /// <summary>
+        /// Asynchronously executes a no query and returns a int for reading the results.
+        /// </summary>
+        public async Task<int> ExecuteNonQueryAsync(string query)
+        {
+            try
+            {
+                using (var connection = new SqliteConnection(connectionString))
+                {
+                    await connection.OpenAsync();
+                    using (var command = new SqliteCommand(query, connection))
+                    {
+                        return await command.ExecuteNonQueryAsync();
+                    }
+                }
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+        /// <summary>
+        /// Reads the full table synchronously.
+        /// </summary>
+        public SqliteDataReader ReadFullTable(string tableName)
+        {
+            string query = "select * from " + tableName;
+            return ExecuteQuery(query);
+        }
+
+        /// <summary>
+        /// Asynchronously reads the full table.
+        /// </summary>
+        public async Task<SqliteDataReader> ReadFullTableAsync(string tableName)
+        {
+            string query = "select * from " + tableName;
+            return await ExecuteQueryAsync(query) as SqliteDataReader;
+        }
+
+        /// <summary>
+        /// Begins a transaction, executes the given query, and commits the transaction.
+        /// </summary>
+        public bool BeginTransaction(string query)
+        {
+            using (var connection = new SqliteConnection(connectionString))
+            {
+                connection.Open();
+
+                using (var transaction = connection.BeginTransaction())
+                {
+                    try
+                    {
+                        using (var command = new SqliteCommand(query, connection))
+                        {
+                            command.ExecuteNonQuery();
+                            transaction.Commit();
+                            return true;
+                        }
+                    }
+                    catch
+                    {
+                        transaction.Rollback();
+                        return false;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Asynchronously begins a transaction, executes the given query, and commits the transaction.
+        /// </summary>
+        public async Task<bool> BeginTransactionAsync(string query)
+        {
+            using (var connection = new SqliteConnection(connectionString))
+            {
+                await connection.OpenAsync();
+
+                using (var transaction = await connection.BeginTransactionAsync())
+                {
+                    try
+                    {
+                        using (var command = connection.CreateCommand())
+                        {
+                            command.Transaction = transaction as SqliteTransaction;
+                            command.CommandText = query;
+                            await command.ExecuteNonQueryAsync();
+                        }
+                        await transaction.CommitAsync();
+                        return true;
+                    }
+                    catch
+                    {
+                        transaction.Rollback();
+                        return false;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Asynchronously begins a transaction, executes multiple queries, and commits the transaction.
+        /// </summary>
+        public async Task<bool> BeginTransactionAsync(List<string> queries)
+        {
+            using (var connection = new SqliteConnection(connectionString))
+            {
+                await connection.OpenAsync();
+
+                using (var transaction = await connection.BeginTransactionAsync())
+                {
+                    try
+                    {
+                        using (var command = connection.CreateCommand())
+                        {
+                            command.Transaction = transaction as SqliteTransaction;
+
+                            foreach (var query in queries)
+                            {
+                                command.CommandText = query;
+                                await command.ExecuteNonQueryAsync();
+                            }
+                        }
+                        await transaction.CommitAsync();
+                        return true;
+                    }
+                    catch
+                    {
+                        transaction.Rollback();
+                        return false;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Selects rows from a table where the id are met.
+        /// </summary>
+        public SqliteDataReader Select(string tableName, int id)
+        {
+            string query = "select * from " + tableName + " where id=" + id;
+            return ExecuteQuery(query);
+        }
+
+        /// <summary>
+        /// Selects rows from a table where the id are met.
+        /// </summary>
+        public async Task<SqliteDataReader> SelectAsync(string tableName, int id)
+        {
+            string query = "select * from " + tableName + " where id=" + id;
+            return await ExecuteQueryAsync(query);
+        }
+
+        /// <summary>
+        /// Inserts values into the specified table.
+        /// </summary>
+        public int Insert(string tableName, string[] values)
+        {
+            string query = $"insert into {tableName} values ('{string.Join("', '", values)}')";
+            return ExecuteNonQuery(query);
+        }
+
+        /// <summary>
+        /// Asynchronously inserts values into the specified table.
+        /// </summary>
+        public async Task<int> InsertAsync(string tableName, string[] values)
+        {
+            string query = $"insert into {tableName} values ('{string.Join("', '", values)}')";
+            return await ExecuteNonQueryAsync(query);
+        }
+
+        /// <summary>
+        /// Inserts specific columns into the specified table.
+        /// </summary>
+        public int Insert(string tableName, string[] cols, string[] values)
+        {
+            if (cols.Length != values.Length)
+            {
+                throw new ArgumentException("The length of columns and values must be equal.");
+            }
+
+            string query = $"insert into {tableName} ({string.Join(", ", cols)}) values ('{string.Join("', '", values)}')";
+            return ExecuteNonQuery(query);
+        }
+
+        /// <summary>
+        /// Asynchronously inserts specific columns into the specified table.
+        /// </summary>
+        public async Task<int> InsertAsync(string tableName, string[] cols, string[] values)
+        {
+            if (cols.Length != values.Length)
+            {
+                throw new ArgumentException("The length of columns and values must be equal.");
+            }
+
+            string query = $"insert into {tableName} ({string.Join(", ", cols)}) values ('{string.Join("', '", values)}')";
+            return await ExecuteNonQueryAsync(query);
+        }
+
+        /// <summary>
+        /// Updates specific columns in the specified table.
+        /// </summary>
+        public int Update(string tableName, string[] cols, string[] colValues, string selectKey, string selectValue)
+        {
+            string query = $"UPDATE {tableName} SET {cols[0]} = '{colValues[0]}'";
+
+            for (int i = 1; i < colValues.Length; i++)
+            {
+                query += $", {cols[i]} = '{colValues[i]}'";
+            }
+
+            query += $" WHERE {selectKey} = '{selectValue}'";
+            return ExecuteNonQuery(query);
+        }
+
+        /// <summary>
+        /// Asynchronously updates specific columns in the specified table.
+        /// </summary>
+        public async Task<int> UpdateAsync(string tableName, string[] cols, string[] colValues, string selectKey, string selectValue)
+        {
+            string query = $"update {tableName} set {cols[0]} = '{colValues[0]}'";
+            for (int i = 1; i < colValues.Length; i++)
+            {
+                query += $", {cols[i]} = '{colValues[i]}'";
+            }
+            query += $" where {selectKey} = '{selectValue}'";
+
+            return await ExecuteNonQueryAsync(query);
+        }
+
+        /// <summary>
+        /// Deletes specific rows from the specified table.
+        /// </summary>
+        public int Delete(string tableName, string[] cols, string[] colValues)
+        {
+            string query = $"DELETE FROM {tableName} WHERE {cols[0]} = '{colValues[0]}'";
+
+            for (int i = 1; i < colValues.Length; i++)
+            {
+                query += $" OR {cols[i]} = '{colValues[i]}'";
+            }
+
+            return ExecuteNonQuery(query);
+        }
+
+        /// <summary>
+        /// Asynchronously deletes specific rows from the specified table.
+        /// </summary>
+        public async Task<int> DeleteAsync(string tableName, string[] cols, string[] colValues)
+        {
+            string query = $"DELETE FROM {tableName} WHERE {cols[0]} = '{colValues[0]}'";
+
+            for (int i = 1; i < colValues.Length; i++)
+            {
+                query += $" OR {cols[i]} = '{colValues[i]}'";
+            }
+
+            return await ExecuteNonQueryAsync(query);
+        }
+
+
+        /// <summary>
+        /// Deletes all rows from the specified table.
+        /// </summary>
+        public int Delete(string tableName)
+        {
+            string query = $"delete from {tableName}";
+            return ExecuteNonQuery(query);
+        }
+
+        /// <summary>
+        /// Asynchronously deletes all rows from the specified table.
+        /// </summary>
+        public async Task<int> DeleteContentsAsync(string tableName)
+        {
+            string query = $"delete from {tableName}";
+            return await ExecuteNonQueryAsync(query);
+        }
+
+        /// <summary>
+        /// Creates a table with the specified columns and their data types.
+        /// </summary>
+        public int CreateTable(string name, string[] cols, string[] colTypes)
+        {
+            if (cols.Length != colTypes.Length)
+            {
+                throw new ArgumentException("The length of columns and column types must be equal.");
+            }
+
+            string query = $"CREATE TABLE {name} ({cols[0]} {colTypes[0]}";
+            for (int i = 1; i < cols.Length; i++)
+            {
+                query += $", {cols[i]} {colTypes[i]}";
+            }
+            query += ")";
+
+            return ExecuteNonQuery(query);
+        }
+
+        /// <summary>
+        /// Asynchronously creates a table with the specified columns and their data types.
+        /// </summary>
+        public async Task<int> CreateTableAsync(string name, string[] cols, string[] colTypes)
+        {
+            if (cols.Length != colTypes.Length)
+            {
+                throw new ArgumentException("The length of columns and column types must be equal.");
+            }
+
+            string query = $"CREATE TABLE {name} ({cols[0]} {colTypes[0]}";
+
+            for (int i = 1; i < cols.Length; i++)
+            {
+                query += $", {cols[i]} {colTypes[i]}";
+            }
+
+            query += ")";
+
+            using (var connection = new SqliteConnection(connectionString))
+            {
+                await connection.OpenAsync();
+                using (var command = new SqliteCommand(query, connection))
+                {
+                    return await command.ExecuteNonQueryAsync();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Selects rows from a table where the conditions are met.
+        /// </summary>
+        public SqliteDataReader SelectWhere(string tableName, string[] items, string[] cols, string[] operations, string[] values)
+        {
+            if (cols.Length != operations.Length || operations.Length != values.Length)
+            {
+                throw new ArgumentException("The length of columns, operations, and values must be equal.");
+            }
+
+            string query = $"SELECT {items[0]}";
+            for (int i = 1; i < items.Length; i++)
+            {
+                query += $", {items[i]}";
+            }
+
+            query += $" FROM {tableName} WHERE {cols[0]} {operations[0]} '{values[0]}'";
+            for (int i = 1; i < cols.Length; i++)
+            {
+                query += $" AND {cols[i]} {operations[i]} '{values[i]}'";
+            }
+
+            return ExecuteQuery(query);
+        }
+
+
+        /// <summary>
+        /// Asynchronously selects rows from a table where the conditions are met.
+        /// </summary>
+        public async Task<SqliteDataReader> SelectWhereAsync(string tableName, string[] items, string[] cols, string[] operations, string[] values)
+        {
+            if (cols.Length != operations.Length || operations.Length != values.Length)
+            {
+                throw new ArgumentException("The length of columns, operations, and values must be equal.");
+            }
+
+            string query = $"SELECT {items[0]}";
+            for (int i = 1; i < items.Length; i++)
+            {
+                query += $", {items[i]}";
+            }
+
+            query += $" FROM {tableName} WHERE {cols[0]} {operations[0]} '{values[0]}'";
+            for (int i = 1; i < cols.Length; i++)
+            {
+                query += $" AND {cols[i]} {operations[i]} '{values[i]}'";
+            }
+
+            return (SqliteDataReader)await ExecuteQueryAsync(query);
+        }
+
+        public void Dispose()
+        {
+            transaction?.Dispose();
+            transaction = null;
+
+            reader?.Close();
+            reader?.Dispose();
+            reader = null;
+
+            command?.Dispose();
+            command = null;
+
+            connection?.Close();
+            connection = null;
+
+        }
     }
 }
